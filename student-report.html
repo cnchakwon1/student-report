@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학생 성과 리포트 생성기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { margin: 0; padding: 0; }
+            .print-bg { background: white !important; }
+        }
+        .star { color: #fbbf24; }
+        .chart-container { position: relative; height: 300px; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app"></div>
+
+    <script>
+        // 전역 상태
+        let appState = {
+            studentName: '',
+            rawData: '',
+            parsedData: [],
+            showPreview: false,
+            shareUrl: '',
+            showShareUrl: false
+        };
+
+        // URL에서 리포트 데이터 읽기 (개선된 버전)
+        function loadFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const reportData = urlParams.get('report');
+            const reportId = urlParams.get('id');
+            
+            try {
+                let decodedData;
+                
+                if (reportId) {
+                    // localStorage에서 데이터 읽기
+                    const storedData = localStorage.getItem(reportId);
+                    if (storedData) {
+                        decodedData = JSON.parse(storedData);
+                        console.log('localStorage에서 데이터 로드 완료');
+                    } else {
+                        console.error('해당 ID의 데이터를 찾을 수 없습니다.');
+                        return;
+                    }
+                } else if (reportData) {
+                    // URL에서 직접 데이터 읽기
+                    decodedData = JSON.parse(atob(reportData));
+                    console.log('URL에서 데이터 로드 완료');
+                } else {
+                    return;
+                }
+                
+                // 압축된 데이터인지 확인
+                if (decodedData.n && decodedData.d) {
+                    // 새로운 압축 형식
+                    appState.studentName = decodedData.n;
+                    appState.parsedData = decompressData(decodedData.d);
+                } else {
+                    // 기존 형식 (하위 호환성)
+                    appState.studentName = decodedData.studentName;
+                    appState.parsedData = decodedData.parsedData;
+                }
+                
+                appState.showPreview = true;
+            } catch (error) {
+                console.error('URL 데이터 파싱 오류:', error);
+                alert('링크가 손상되었거나 만료되었습니다.');
+            }
+        }
+
+        // 노션 데이터 파싱
+        function parseNotionData(text) {
+            const lines = text.trim().split('\n');
+            const data = [];
+            
+            lines.forEach(line => {
+                const parts = line.split(/\t+/).filter(part => part !== undefined);
+                
+                if (parts.length >= 2) {
+                    const date = parts[0] ? parts[0].trim() : '';
+                    const attendance = parts[1] ? parts[1].trim() : '';
+                    const wordScore = parts[2] ? parts[2].trim() : '';
+                    const totalWords = parts[3] ? parts[3].trim() : '';
+                    const retest = parts[4] ? parts[4].trim() : '';
+                    const homework = parts[5] ? parts[5].trim() : '';
+                    const attitude = parts[6] ? parts[6].trim() : '';
+                    
+                    const convertStars = (stars) => {
+                        if (!stars) return null;
+                        const starCount = (stars.match(/★/g) || []).length;
+                        return starCount;
+                    };
+
+                    const isAbsent = attendance === '결석';
+
+                    data.push({
+                        date: date,
+                        attendance: attendance,
+                        wordScore: !isAbsent && wordScore && wordScore !== '' ? parseInt(wordScore) : null,
+                        totalWords: !isAbsent && totalWords && totalWords !== '' ? parseInt(totalWords) : null,
+                        retest: !isAbsent && retest && retest.includes('재시험') ? '재시험' : '',
+                        homework: !isAbsent ? convertStars(homework) : null,
+                        attitude: !isAbsent ? convertStars(attitude) : null
+                    });
+                }
+            });
+            
+            return data.reverse();
+        }
+
+        // 통계 계산
+        function calculateStats(parsedData) {
+            const totalClasses = parsedData.length;
+            const attendanceCount = parsedData.filter(d => d.attendance === '출석').length;
+            const lateCount = parsedData.filter(d => d.attendance === '지각').length;
+            const absentCount = parsedData.filter(d => d.attendance === '결석').length;
+            const attendanceRate = (((attendanceCount + lateCount) / totalClasses) * 100).toFixed(1);
+            const retestCount = parsedData.filter(d => d.retest === '재시험').length;
+
+            const chartData = parsedData.map((item, index) => {
+                const accuracy = item.wordScore !== null && item.totalWords !== null && item.totalWords > 0 
+                    ? (item.wordScore / item.totalWords * 100) 
+                    : null;
+                
+                return {
+                    ...item,
+                    day: index + 1,
+                    accuracy: accuracy,
+                    shortDate: item.date.substring(5)
+                };
+            }).filter(item => item.accuracy !== null && !isNaN(item.accuracy));
+
+            const averageAccuracy = chartData.length > 0 ? chartData.reduce((sum, item) => sum + item.accuracy, 0) / chartData.length : 0;
+
+            return {
+                totalClasses,
+                attendanceCount,
+                lateCount,
+                absentCount,
+                attendanceRate,
+                retestCount,
+                averageAccuracy,
+                chartData
+            };
+        }
+
+        // 데이터 압축 함수
+        function compressData(data) {
+            // 불필요한 데이터 제거 및 압축
+            const compressed = data.map(item => ({
+                d: item.date.substring(5), // MM/DD만 저장
+                a: item.attendance === '출석' ? 1 : item.attendance === '지각' ? 2 : 3,
+                w: item.wordScore,
+                t: item.totalWords,
+                r: item.retest === '재시험' ? 1 : 0,
+                h: item.homework,
+                at: item.attitude
+            }));
+            return compressed;
+        }
+
+        // 데이터 압축 해제 함수
+        function decompressData(compressed) {
+            const currentYear = new Date().getFullYear();
+            return compressed.map(item => ({
+                date: `${currentYear}/${item.d}`,
+                attendance: item.a === 1 ? '출석' : item.a === 2 ? '지각' : '결석',
+                wordScore: item.w,
+                totalWords: item.t,
+                retest: item.r === 1 ? '재시험' : '',
+                homework: item.h,
+                attitude: item.at
+            }));
+        }
+
+        // 공유 링크 생성 (개선된 버전)
+        function generateShareUrl() {
+            try {
+                const compressedData = compressData(appState.parsedData);
+                const reportData = {
+                    n: appState.studentName,
+                    d: compressedData
+                };
+                
+                const jsonString = JSON.stringify(reportData);
+                console.log('압축된 데이터 크기:', jsonString.length);
+                
+                // 매우 공격적인 압축 시도
+                if (jsonString.length > 1200) {
+                    // 필수 데이터만 포함하는 극단적 압축
+                    const minimalData = {
+                        n: appState.studentName,
+                        d: compressedData.slice(0, 10) // 최근 10개 데이터만
+                    };
+                    const minimalJson = JSON.stringify(minimalData);
+                    
+                    if (minimalJson.length > 1200) {
+                        // 그래도 너무 크면 URL 복사 방식으로 변경
+                        showManualShareOption();
+                        return;
+                    }
+                    
+                    const encodedData = btoa(minimalJson);
+                    const baseUrl = window.location.origin + window.location.pathname;
+                    const newShareUrl = `${baseUrl}?report=${encodedData}`;
+                    
+                    appState.shareUrl = newShareUrl;
+                    appState.showShareUrl = true;
+                    render();
+                    
+                    alert('데이터가 커서 최근 10개 수업 데이터만 포함된 링크를 생성했습니다.');
+                    return;
+                }
+                
+                const encodedData = btoa(jsonString);
+                const baseUrl = window.location.origin + window.location.pathname;
+                const newShareUrl = `${baseUrl}?report=${encodedData}`;
+                
+                appState.shareUrl = newShareUrl;
+                appState.showShareUrl = true;
+                render();
+                console.log('링크 생성 완료:', newShareUrl.length, '자');
+                
+            } catch (error) {
+                console.error('링크 생성 오류:', error);
+                showManualShareOption();
+            }
+        }
+
+        // 수동 공유 옵션 표시
+        function showManualShareOption() {
+            const manualUrl = window.location.origin + window.location.pathname;
+            appState.shareUrl = `${manualUrl}
+
+📝 수동 공유 방법:
+1. 이 링크를 학부모님께 보내주세요: ${manualUrl}
+2. 아래 데이터를 함께 전달해주세요:
+
+학생명: ${appState.studentName}
+데이터:
+${appState.parsedData.map(item => 
+    `${item.date}\t${item.attendance}\t${item.wordScore || ''}\t${item.totalWords || ''}\t${item.retest}\t${'★'.repeat(item.homework || 0)}${'☆'.repeat(3-(item.homework || 0))}\t${'★'.repeat(item.attitude || 0)}${'☆'.repeat(3-(item.attitude || 0))}`
+).join('\n')}`;
+            
+            appState.showShareUrl = true;
+            render();
+        }
+
+        // 링크 복사
+        async function copyShareUrl() {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(appState.shareUrl);
+                    alert('링크가 복사되었습니다!');
+                } else {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = appState.shareUrl;
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('링크가 복사되었습니다!');
+                }
+            } catch (error) {
+                alert('복사에 실패했습니다. 링크를 수동으로 복사해주세요:\\n\\n' + appState.shareUrl);
+            }
+        }
+
+        // 차트 생성
+        function createCharts(stats) {
+            setTimeout(() => {
+                // 선형 차트
+                const lineCtx = document.getElementById('lineChart');
+                if (lineCtx && stats.chartData.length > 0) {
+                    new Chart(lineCtx, {
+                        type: 'line',
+                        data: {
+                            labels: stats.chartData.map(item => item.shortDate),
+                            datasets: [{
+                                label: '정답률 (%)',
+                                data: stats.chartData.map(item => item.accuracy),
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.3,
+                                pointBackgroundColor: '#3b82f6',
+                                pointRadius: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 원형 차트들
+                const attendanceData = [
+                    { label: '출석', value: stats.attendanceCount, color: '#10b981' },
+                    { label: '지각', value: stats.lateCount, color: '#f59e0b' },
+                    { label: '결석', value: stats.absentCount, color: '#ef4444' }
+                ].filter(item => item.value > 0);
+
+                const attendanceCtx = document.getElementById('attendanceChart');
+                if (attendanceCtx && attendanceData.length > 0) {
+                    new Chart(attendanceCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: attendanceData.map(item => item.label),
+                            datasets: [{
+                                data: attendanceData.map(item => item.value),
+                                backgroundColor: attendanceData.map(item => item.color)
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 숙제 분석
+                const homeworkData = appState.parsedData.filter(d => d.homework !== null);
+                const homework1 = homeworkData.filter(d => d.homework === 1).length;
+                const homework2 = homeworkData.filter(d => d.homework === 2).length;
+                const homework3 = homeworkData.filter(d => d.homework === 3).length;
+
+                const homeworkPieData = [
+                    { label: '미흡 (★☆☆)', value: homework1, color: '#ef4444' },
+                    { label: '보통 (★★☆)', value: homework2, color: '#f59e0b' },
+                    { label: '우수 (★★★)', value: homework3, color: '#10b981' }
+                ].filter(item => item.value > 0);
+
+                const homeworkCtx = document.getElementById('homeworkChart');
+                if (homeworkCtx && homeworkPieData.length > 0) {
+                    new Chart(homeworkCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: homeworkPieData.map(item => item.label),
+                            datasets: [{
+                                data: homeworkPieData.map(item => item.value),
+                                backgroundColor: homeworkPieData.map(item => item.color)
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // 수업 태도 분석
+                const attitudeData = appState.parsedData.filter(d => d.attitude !== null);
+                const attitude1 = attitudeData.filter(d => d.attitude === 1).length;
+                const attitude2 = attitudeData.filter(d => d.attitude === 2).length;
+                const attitude3 = attitudeData.filter(d => d.attitude === 3).length;
+
+                const attitudePieData = [
+                    { label: '미흡 (★☆☆)', value: attitude1, color: '#ef4444' },
+                    { label: '보통 (★★☆)', value: attitude2, color: '#f59e0b' },
+                    { label: '우수 (★★★)', value: attitude3, color: '#10b981' }
+                ].filter(item => item.value > 0);
+
+                const attitudeCtx = document.getElementById('attitudeChart');
+                if (attitudeCtx && attitudePieData.length > 0) {
+                    new Chart(attitudeCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: attitudePieData.map(item => item.label),
+                            datasets: [{
+                                data: attitudePieData.map(item => item.value),
+                                backgroundColor: attitudePieData.map(item => item.color)
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+            }, 100);
+        }
+
+        // 렌더링
+        function render() {
+            const app = document.getElementById('app');
+
+            if (appState.showPreview) {
+                const stats = calculateStats(appState.parsedData);
+                const isExcellent = stats.averageAccuracy >= 85 && stats.retestCount <= 2 && stats.attendanceRate >= 95;
+                const themeColor = isExcellent ? 'blue' : stats.averageAccuracy >= 70 ? 'orange' : 'red';
+
+                app.innerHTML = `
+                    <div class="no-print fixed top-4 right-4 z-50 space-y-2">
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="resetForm()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                                새 리포트 작성
+                            </button>
+                            <button onclick="generateShareUrl()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                                📤 공유 링크 생성
+                            </button>
+                            <button onclick="window.print()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                                🖨️ 인쇄하기
+                            </button>
+                        </div>
+                        
+                        ${appState.showShareUrl ? `
+                        <div class="bg-white p-4 rounded-lg shadow-lg border max-w-md">
+                            <h3 class="font-semibold text-gray-800 mb-2">공유 링크</h3>
+                            <div class="space-y-2">
+                                <textarea readonly class="w-full p-2 border rounded text-sm h-20 resize-none">${appState.shareUrl}</textarea>
+                                <div class="flex gap-2">
+                                    <button onclick="copyShareUrl()" class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition-colors">
+                                        📋 복사
+                                    </button>
+                                    <button onclick="appState.showShareUrl = false; render()" class="bg-gray-400 text-white px-3 py-2 rounded hover:bg-gray-500 transition-colors">
+                                        닫기
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">이 링크를 학부모님께 보내주세요</p>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="min-h-screen bg-gradient-to-br from-${themeColor}-50 to-${themeColor}-100 p-6 print-bg">
+                        <div class="max-w-7xl mx-auto">
+                            <!-- 헤더 -->
+                            <div class="text-center mb-8">
+                                <h1 class="text-4xl font-bold text-gray-800 mb-2">학기말 성과 리포트</h1>
+                                <p class="text-xl text-gray-600">${appState.studentName} 학생 • 2025년 1학기</p>
+                            </div>
+
+                            <!-- 요약 카드들 -->
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                                    <div class="text-${themeColor}-500 mb-3">📅</div>
+                                    <h3 class="text-lg font-semibold text-gray-700">출석률</h3>
+                                    <p class="text-3xl font-bold text-${themeColor}-600">${stats.attendanceRate}%</p>
+                                    <p class="text-sm text-gray-500">${stats.attendanceCount + stats.lateCount}/${stats.totalClasses}일</p>
+                                    ${stats.lateCount > 0 ? `<p class="text-xs text-gray-400">지각 ${stats.lateCount}회</p>` : ''}
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                                    <div class="text-green-500 mb-3">📈</div>
+                                    <h3 class="text-lg font-semibold text-gray-700">평균 정답률</h3>
+                                    <p class="text-3xl font-bold text-green-600">${stats.averageAccuracy.toFixed(1)}%</p>
+                                    <p class="text-sm text-gray-500">단어 테스트</p>
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                                    <div class="${stats.retestCount > 5 ? 'text-red-500' : 'text-blue-500'} mb-3">${stats.retestCount > 5 ? '⚠️' : '📚'}</div>
+                                    <h3 class="text-lg font-semibold text-gray-700">재시험 횟수</h3>
+                                    <p class="text-3xl font-bold ${stats.retestCount > 5 ? 'text-red-600' : 'text-blue-600'}">${stats.retestCount}회</p>
+                                    <p class="text-sm text-gray-500">${stats.retestCount > 5 ? '개선 필요' : '양호'}</p>
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                                    <div class="text-purple-500 mb-3">🏆</div>
+                                    <h3 class="text-lg font-semibold text-gray-700">종합 평가</h3>
+                                    <div class="text-2xl font-bold text-purple-600">
+                                        ${isExcellent ? '우수' : stats.averageAccuracy >= 70 ? '보통' : '노력'}
+                                    </div>
+                                    <p class="text-sm text-gray-500">
+                                        ${isExcellent ? '매우 우수함' : stats.averageAccuracy >= 70 ? '꾸준히 향상 중' : '개선 필요'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- 단어 점수 추이 차트 -->
+                            ${stats.chartData.length > 0 ? `
+                            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-4">단어 테스트 정답률 추이</h3>
+                                <div class="chart-container">
+                                    <canvas id="lineChart"></canvas>
+                                </div>
+                            </div>
+                            ` : ''}
+
+                            <!-- 원형 그래프 섹션 -->
+                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">출석 현황</h3>
+                                    <div class="chart-container">
+                                        <canvas id="attendanceChart"></canvas>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">수업 태도</h3>
+                                    <div class="chart-container">
+                                        <canvas id="attitudeChart"></canvas>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white rounded-lg shadow-lg p-6">
+                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">숙제 이행</h3>
+                                    <div class="chart-container">
+                                        <canvas id="homeworkChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 총평 -->
+                            <div class="bg-white rounded-lg shadow-lg p-6">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-4">학기 총평</h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-700 mb-3 text-green-600">강점</h4>
+                                        <div class="space-y-2 text-gray-700 text-sm">
+                                            ${stats.attendanceRate >= 90 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-3"></span>우수한 출석률 (' + stats.attendanceRate + '%)</p>' : ''}
+                                            <p class="flex items-center"><span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-3"></span>꾸준한 수업 참여</p>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-semibold text-gray-700 mb-3 text-red-600">개선 필요사항</h4>
+                                        <div class="space-y-2 text-gray-700 text-sm">
+                                            ${stats.retestCount > 3 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-red-500 rounded-full mr-3"></span>재시험 횟수 줄이기 (' + stats.retestCount + '회)</p>' : ''}
+                                            ${stats.lateCount > 0 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-orange-500 rounded-full mr-3"></span>지각 횟수 줄이기 (' + stats.lateCount + '회)</p>' : ''}
+                                            ${stats.averageAccuracy < 80 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-blue-500 rounded-full mr-3"></span>예습·복습을 통한 학습 보완</p>' : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                createCharts(stats);
+            } else {
+                app.innerHTML = `
+                    <div class="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-6">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="text-center mb-8">
+                                <h1 class="text-4xl font-bold text-gray-800 mb-2">학생 성과 리포트 생성기</h1>
+                                <p class="text-xl text-gray-600">노션 데이터를 입력하여 자동으로 리포트를 생성하세요</p>
+                            </div>
+
+                            <div class="bg-white rounded-lg shadow-lg p-8">
+                                <div class="space-y-6">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">학생 이름</label>
+                                        <input type="text" id="studentNameInput" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="예: 홍길동">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">노션 데이터 (복사-붙여넣기)</label>
+                                        <div class="mb-2 text-sm text-gray-500 bg-gray-50 p-3 rounded">
+                                            <strong>사용법:</strong> 노션에서 표 데이터를 선택하여 복사한 후 아래 텍스트 박스에 붙여넣기하세요.<br/>
+                                            <strong>형식:</strong> 날짜 | 출결 | 단어점수 | 단어총개수 | 재시험여부 | 숙제상태(★) | 수업태도(★)
+                                        </div>
+                                        <textarea id="rawDataInput" class="w-full h-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm" placeholder="예:
+2025/08/04	출석	8	8		★★★	★★★
+2025/08/01	출석	19	25	재시험	★★★	★★★
+2025/07/25	출석	24	25		★★★	★★★"></textarea>
+                                    </div>
+
+                                    <div class="flex justify-center space-x-4">
+                                        <button onclick="handleSubmit()" class="bg-blue-500 text-white px-8 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2">
+                                            👁️ 리포트 생성하기
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                                    <h3 class="font-semibold text-gray-700 mb-2">샘플 데이터 (테스트용)</h3>
+                                    <button onclick="loadSampleData()" class="text-sm bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 transition-colors">
+                                        샘플 데이터 로드
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 이벤트 핸들러들
+        function handleSubmit() {
+            const studentName = document.getElementById('studentNameInput').value;
+            const rawData = document.getElementById('rawDataInput').value;
+
+            if (!studentName.trim()) {
+                alert('학생 이름을 입력해주세요.');
+                return;
+            }
+            
+            if (!rawData.trim()) {
+                alert('데이터를 입력해주세요.');
+                return;
+            }
+
+            const parsed = parseNotionData(rawData);
+            if (parsed.length === 0) {
+                alert('데이터 형식을 확인해주세요.');
+                return;
+            }
+
+            appState.studentName = studentName;
+            appState.rawData = rawData;
+            appState.parsedData = parsed;
+            appState.showPreview = true;
+            render();
+        }
+
+        function resetForm() {
+            appState.studentName = '';
+            appState.rawData = '';
+            appState.parsedData = [];
+            appState.showPreview = false;
+            appState.shareUrl = '';
+            appState.showShareUrl = false;
+            window.history.pushState({}, document.title, window.location.pathname);
+            render();
+        }
+
+        function loadSampleData() {
+            document.getElementById('studentNameInput').value = '홍길동';
+            document.getElementById('rawDataInput').value = `2025/08/04	출석	8	8		★★★	★★★
+2025/08/01	출석	19	25	재시험	★★★	★★★
+2025/07/25	출석	24	25		★★★	★★★
+2025/07/23	출석	6	7		★★★	★★★
+2025/07/21	출석	8	8		★★★	★★★
+2025/07/18	결석					
+2025/07/16	출석	7	7		★★★	★★★`;
+        }
+
+        // 초기화
+        window.onload = function() {
+            loadFromURL();
+            render();
+        };
+    </script>
+</body>
+</html>
