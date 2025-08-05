@@ -13,8 +13,8 @@
                 margin: 0; 
                 padding: 15px;
                 background: white !important;
-                font-size: 11px;
-                line-height: 1.3;
+                font-size: 13px; /* 글씨 크기 증가 */
+                line-height: 1.4;
             }
             .print-bg { 
                 background: white !important; 
@@ -22,23 +22,23 @@
             }
             
             /* 헤더 크기 조정 */
-            .text-4xl { font-size: 24px !important; margin-bottom: 8px !important; }
-            .text-xl { font-size: 14px !important; margin-bottom: 15px !important; }
-            .text-3xl { font-size: 16px !important; }
-            .text-2xl { font-size: 14px !important; }
-            .text-lg { font-size: 12px !important; }
-            .text-sm { font-size: 10px !important; }
-            .text-xs { font-size: 9px !important; }
+            .text-4xl { font-size: 26px !important; margin-bottom: 10px !important; }
+            .text-xl { font-size: 16px !important; margin-bottom: 18px !important; }
+            .text-3xl { font-size: 18px !important; } /* 숫자 크기 증가 */
+            .text-2xl { font-size: 16px !important; }
+            .text-lg { font-size: 14px !important; } /* 제목 크기 증가 */
+            .text-sm { font-size: 11px !important; }
+            .text-xs { font-size: 10px !important; }
             
             /* 간격 조정 */
-            .mb-8 { margin-bottom: 15px !important; }
-            .mb-6 { margin-bottom: 12px !important; }
-            .mb-4 { margin-bottom: 10px !important; }
-            .mb-3 { margin-bottom: 8px !important; }
-            .mb-2 { margin-bottom: 6px !important; }
-            .p-6 { padding: 12px !important; }
-            .gap-8 { gap: 12px !important; }
-            .gap-6 { gap: 8px !important; }
+            .mb-8 { margin-bottom: 18px !important; }
+            .mb-6 { margin-bottom: 15px !important; }
+            .mb-4 { margin-bottom: 12px !important; }
+            .mb-3 { margin-bottom: 10px !important; }
+            .mb-2 { margin-bottom: 8px !important; }
+            .p-6 { padding: 15px !important; } /* 패딩 증가 */
+            .gap-8 { gap: 15px !important; }
+            .gap-6 { gap: 12px !important; }
             
             /* 카드 스타일 */
             .shadow-lg { box-shadow: none !important; }
@@ -48,48 +48,51 @@
             .stats-grid {
                 display: flex !important;
                 flex-direction: row !important;
-                gap: 8px !important;
-                margin-bottom: 15px !important;
+                gap: 10px !important;
+                margin-bottom: 18px !important;
             }
             .stats-card {
                 flex: 1 !important;
                 min-width: 0 !important;
                 text-align: center !important;
-                padding: 10px 8px !important;
+                padding: 12px 10px !important; /* 패딩 증가 */
                 border: 1px solid #d1d5db !important;
                 border-radius: 6px !important;
                 background: white !important;
             }
             
-            /* 차트 컨테이너 크기 대폭 축소 */
-            .chart-container { 
-                height: 140px !important; 
-                margin-bottom: 10px !important;
+            /* 선형 차트 - 충분한 높이와 여백 */
+            .line-chart-container {
+                height: 220px !important; /* 높이 증가 */
+                margin-bottom: 18px !important;
+                padding: 10px !important; /* 여백 추가 */
             }
             
-            /* 선형 차트는 좀 더 크게 */
-            .line-chart-container {
-                height: 180px !important;
-                margin-bottom: 15px !important;
+            /* 원형 차트 - 크기 증가 및 여백 확보 */
+            .chart-container { 
+                height: 180px !important; /* 높이 증가 */
+                margin-bottom: 12px !important;
+                padding: 5px !important; /* 안쪽 여백 */
             }
             
             /* 원형 차트 그리드 */
             .pie-charts-grid {
                 display: flex !important;
-                gap: 8px !important;
-                margin-bottom: 15px !important;
+                gap: 12px !important;
+                margin-bottom: 18px !important;
             }
             .pie-chart-card {
                 flex: 1 !important;
-                padding: 8px !important;
+                padding: 12px !important; /* 패딩 증가 */
                 border: 1px solid #d1d5db !important;
                 border-radius: 6px !important;
+                min-height: 240px !important; /* 최소 높이 보장 */
             }
             
             /* 총평 섹션 */
             .summary-grid {
                 display: flex !important;
-                gap: 12px !important;
+                gap: 15px !important;
             }
             .summary-column {
                 flex: 1 !important;
@@ -362,7 +365,7 @@ ${appState.parsedData.map(item =>
             }
         }
 
-        // 차트 생성
+        // 차트 생성 (인쇄 최적화)
         function createCharts(stats) {
             setTimeout(() => {
                 // 선형 차트
@@ -385,17 +388,28 @@ ${appState.parsedData.map(item =>
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    labels: {
+                                        font: { size: 12 }
+                                    }
+                                }
+                            },
                             scales: {
+                                x: {
+                                    ticks: { font: { size: 10 } }
+                                },
                                 y: {
                                     beginAtZero: true,
-                                    max: 100
+                                    max: 100,
+                                    ticks: { font: { size: 10 } }
                                 }
                             }
                         }
                     });
                 }
 
-                // 원형 차트들
+                // 출석 현황 차트
                 const attendanceData = [
                     { label: '출석', value: stats.attendanceCount, color: '#10b981' },
                     { label: '지각', value: stats.lateCount, color: '#f59e0b' },
@@ -418,7 +432,11 @@ ${appState.parsedData.map(item =>
                             maintainAspectRatio: false,
                             plugins: {
                                 legend: {
-                                    position: 'bottom'
+                                    position: 'bottom',
+                                    labels: { 
+                                        font: { size: 11 },
+                                        padding: 10
+                                    }
                                 }
                             }
                         }
@@ -453,7 +471,11 @@ ${appState.parsedData.map(item =>
                             maintainAspectRatio: false,
                             plugins: {
                                 legend: {
-                                    position: 'bottom'
+                                    position: 'bottom',
+                                    labels: { 
+                                        font: { size: 11 },
+                                        padding: 10
+                                    }
                                 }
                             }
                         }
@@ -488,7 +510,11 @@ ${appState.parsedData.map(item =>
                             maintainAspectRatio: false,
                             plugins: {
                                 legend: {
-                                    position: 'bottom'
+                                    position: 'bottom',
+                                    labels: { 
+                                        font: { size: 11 },
+                                        padding: 10
+                                    }
                                 }
                             }
                         }
