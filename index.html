@@ -67,25 +67,65 @@ function loadFromURL() {
 }
 
 function parseNotionData(text){
-    const lines=text.trim().split('\n'); const data=[];
-    lines.forEach(line=>{
-        const parts=line.split(/\t+/).filter(p=>p!==undefined);
-        if(parts.length>=2){
-            const [date,attendance,wordScore,totalWords,retest,homework,attitude]=parts.map(p=>p? p.trim(): '');
-            const convertStars=s=>!s? null : (s.match(/★/g)||[]).length;
-            const isAbsent=attendance==='결석';
+    const lines = text.trim().split('\n');
+    const data = [];
+
+    lines.forEach(line => {
+        const parts = line.split(/\t+/).map(p => p ? p.trim() : '');
+        const date = parts[0] || '';
+        const attendance = parts[1] || '';
+        const wordScore = parts[2] || '';
+        const totalWords = parts[3] || '';
+        const retest = parts[4] || '';
+        const homeworkRaw = parts[5] || '';
+        const attitudeRaw = parts[6] || '';
+
+        const isAbsent = attendance === '결석';
+
+        // 숙제 처리
+        let homework = null;      // 통계용 숫자
+        let homeworkDisplay = ''; // 화면 표시용
+
+        if (!isAbsent) {
+            if (homeworkRaw.includes('★')) {
+                // 별점
+                homework = (homeworkRaw.match(/★/g) || []).length;
+                homeworkDisplay = '★'.repeat(homework) + '☆'.repeat(3 - homework);
+            } else if (homeworkRaw === '미제출') {
+                homework = 0;           // 통계용 0
+                homeworkDisplay = '미제출';
+            } else if (homeworkRaw === '지난 시간에는 숙제가 없었습니다.') {
+                homework = null;        // 통계 제외
+                homeworkDisplay = '';   // 화면에도 표시 X
+            } else {
+                homework = null;        // 알 수 없는 값도 제외
+                homeworkDisplay = homeworkRaw || '';
+            }
+        }
+
+        // 태도 처리
+        let attitude = null;
+        if (!isAbsent && attitudeRaw.includes('★')) {
+            attitude = (attitudeRaw.match(/★/g) || []).length;
+        }
+
+        if(date && attendance){
             data.push({
-                date, attendance,
-                wordScore:!isAbsent && wordScore? parseInt(wordScore):null,
-                totalWords:!isAbsent && totalWords? parseInt(totalWords):null,
-                retest:!isAbsent && retest.includes('재시험')? '재시험':'',
-                homework:!isAbsent? convertStars(homework):null,
-                attitude:!isAbsent? convertStars(attitude):null
+                date,
+                attendance,
+                wordScore: !isAbsent && wordScore ? parseInt(wordScore) : null,
+                totalWords: !isAbsent && totalWords ? parseInt(totalWords) : null,
+                retest: !isAbsent && retest.includes('재시험') ? '재시험' : '',
+                homework,
+                homeworkDisplay, // 화면 표시용
+                attitude
             });
         }
     });
+
     return data.reverse();
 }
+
 
 function calculateStats(parsedData){
     const totalClasses=parsedData.length;
