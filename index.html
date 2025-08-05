@@ -9,11 +9,32 @@
     <style>
         @media print {
             .no-print { display: none !important; }
-            body { margin: 0; padding: 0; }
-            .print-bg { background: white !important; }
+            body { 
+                margin: 0; 
+                padding: 20px;
+                background: white !important;
+                font-size: 12px;
+            }
+            .print-bg { 
+                background: white !important; 
+                box-shadow: none !important;
+            }
+            .text-4xl { font-size: 28px !important; }
+            .text-3xl { font-size: 20px !important; }
+            .text-xl { font-size: 16px !important; }
+            .text-lg { font-size: 14px !important; }
+            .mb-8 { margin-bottom: 20px !important; }
+            .mb-6 { margin-bottom: 15px !important; }
+            .p-6 { padding: 15px !important; }
+            .gap-6 { gap: 10px !important; }
+            .shadow-lg { box-shadow: none !important; }
+            .rounded-lg { border-radius: 8px !important; border: 1px solid #e5e7eb; }
         }
         .star { color: #fbbf24; }
         .chart-container { position: relative; height: 300px; }
+        @media print {
+            .chart-container { height: 200px !important; }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -422,33 +443,22 @@ ${appState.parsedData.map(item =>
                     <div class="no-print fixed top-4 right-4 z-50 space-y-2">
                         <div class="flex flex-wrap gap-2">
                             <button onclick="resetForm()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                                새 리포트 작성
+                                🔄 새 리포트 작성
                             </button>
-                            <button onclick="generateShareUrl()" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
-                                📤 공유 링크 생성
-                            </button>
-                            <button onclick="window.print()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
-                                🖨️ 인쇄하기
+                            <button onclick="window.print()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors text-lg font-semibold">
+                                📄 PDF로 저장하기
                             </button>
                         </div>
                         
-                        ${appState.showShareUrl ? `
-                        <div class="bg-white p-4 rounded-lg shadow-lg border max-w-md">
-                            <h3 class="font-semibold text-gray-800 mb-2">공유 링크</h3>
-                            <div class="space-y-2">
-                                <textarea readonly class="w-full p-2 border rounded text-sm h-20 resize-none">${appState.shareUrl}</textarea>
-                                <div class="flex gap-2">
-                                    <button onclick="copyShareUrl()" class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition-colors">
-                                        📋 복사
-                                    </button>
-                                    <button onclick="appState.showShareUrl = false; render()" class="bg-gray-400 text-white px-3 py-2 rounded hover:bg-gray-500 transition-colors">
-                                        닫기
-                                    </button>
-                                </div>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-sm">
+                            <h3 class="font-semibold text-blue-800 mb-2">📱 학부모님께 전송 방법</h3>
+                            <div class="text-sm text-blue-700 space-y-1">
+                                <p>1️⃣ "PDF로 저장하기" 클릭</p>
+                                <p>2️⃣ 저장된 PDF 파일을</p>
+                                <p>3️⃣ 카톡/이메일로 전송</p>
+                                <p class="font-medium mt-2">✨ 간단하고 확실해요!</p>
                             </div>
-                            <p class="text-xs text-gray-500 mt-2">이 링크를 학부모님께 보내주세요</p>
                         </div>
-                        ` : ''}
                     </div>
 
                     <div class="min-h-screen bg-gradient-to-br from-${themeColor}-50 to-${themeColor}-100 p-6 print-bg">
