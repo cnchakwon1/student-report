@@ -248,15 +248,25 @@ function handleSubmit(){
     appState.studentName=studentName; appState.rawData=rawData; appState.parsedData=parsed; appState.showPreview=true; render();
 }
 function resetForm(){ appState={studentName:'', rawData:'', parsedData:[], showPreview:false, shareUrl:'', showShareUrl:false}; window.history.pushState({}, document.title, window.location.pathname); render();}
-function loadSampleData(){
-    document.getElementById('studentNameInput').value='홍길동';
-    document.getElementById('rawDataInput').value=`2025/08/04	출석	8	8		★★★	★★★
-2025/08/01	출석	19	25	재시험	★★★	★★★
-2025/07/25	출석	24	25		★★★	★★★
-2025/07/23	출석	6	7		★★★	★★★
-2025/07/21	출석	8	8		★★★	★★★
-2025/07/18	결석					
-2025/07/16	출석	7	7		★★★	★★★`;
+function loadSampleData() {
+    document.getElementById('studentNameInput').value = '홍길동';
+    document.getElementById('rawDataInput').value = `2025/08/05	지각	18	20		★★☆	★★★
+2025/07/24	지각	6	14	재시험	★★★	★★★
+2025/07/22	출석	20	20		★☆☆	★★★
+2025/07/17	출석	5	14	재시험	★★☆	★★★
+2025/07/15	출석	8	20	재시험	★☆☆	★★★
+2025/07/10	출석	7	14	재시험	★★☆	★★★
+2025/07/08	출석	18	20		★☆☆	★★☆
+2025/07/03	출석	14	14		★★★	★★★
+2025/07/01	결석					
+2025/06/26	출석	14	14		★★★	★★★
+2025/06/24	출석	13	20	재시험	★☆☆	★★☆
+2025/06/19	출석	10	13	재시험	★★☆	★★★
+2025/06/17	출석	10	20	재시험	★☆☆	★★★
+2025/06/12	출석	2	13	재시험	★★★	★★☆
+2025/06/10	출석	17	20		★☆☆	★★★
+2025/06/05	출석	14	14		★☆☆	★★★
+2025/06/03	출석				지난 시간에는 숙제가 없었습니다.	★★★`;
 }
 window.onload=function(){ loadFromURL(); render(); };
 </script>
