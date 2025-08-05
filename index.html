@@ -523,140 +523,75 @@ ${appState.parsedData.map(item =>
             }, 100);
         }
 
+        // 요약 카드 템플릿
+        function createStatCard(icon, title, value, subtext, color) {
+            return `
+            <div class="bg-white rounded-lg shadow-lg p-6 text-center stats-card">
+                <div class="text-${color}-500 mb-3">${icon}</div>
+                <h3 class="text-lg font-semibold text-gray-700">${title}</h3>
+                <p class="text-3xl font-bold text-${color}-600">${value}</p>
+                <p class="text-sm text-gray-500">${subtext || ''}</p>
+            </div>
+            `;
+        }
+        
+        // Pie 차트 박스 템플릿
+        function createPieChartBox(title, canvasId) {
+            return `
+            <div class="bg-white rounded-lg shadow-lg p-6 pie-chart-card">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">${title}</h3>
+                <div class="chart-container">
+                    <canvas id="${canvasId}"></canvas>
+                </div>
+            </div>
+            `;
+        }
+        
+        // 메인 리포트 렌더 함수
+        function renderReport(stats) {
+            const summaryCards = `
+                ${createStatCard('📅', '출석률', `${stats.attendanceRate}%`, `${stats.attendanceCount + stats.lateCount}/${stats.totalClasses}일`, 'blue')}
+                ${createStatCard('📈', '평균 정답률', `${stats.averageAccuracy.toFixed(1)}%`, '단어 테스트', 'green')}
+                ${createStatCard(stats.retestCount > 5 ? '⚠️' : '📚', '재시험 횟수', `${stats.retestCount}회`, stats.retestCount > 5 ? '개선 필요' : '양호', stats.retestCount > 5 ? 'red' : 'blue')}
+                ${createStatCard('🏆', '종합 평가', stats.overallGrade, stats.overallComment, 'purple')}
+            `;
+        
+            const pieCharts = `
+                ${createPieChartBox('출석 현황', 'attendanceChart')}
+                ${createPieChartBox('수업 태도', 'attitudeChart')}
+                ${createPieChartBox('숙제 이행', 'homeworkChart')}
+            `;
+        
+            return `
+            <div class="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-6 print-bg">
+                <div class="max-w-7xl mx-auto">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold text-gray-800 mb-2">학기말 성과 리포트</h1>
+                        <p class="text-xl text-gray-600">${appState.studentName} 학생 • 2025년 1학기</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 stats-grid no-break">${summaryCards}</div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 pie-charts-grid no-break">${pieCharts}</div>
+                </div>
+            </div>
+            `;
+        }
+
+
         // 렌더링
         function render() {
             const app = document.getElementById('app');
 
             if (appState.showPreview) {
                 const stats = calculateStats(appState.parsedData);
-                const isExcellent = stats.averageAccuracy >= 85 && stats.retestCount <= 2 && stats.attendanceRate >= 95;
-                const themeColor = isExcellent ? 'blue' : stats.averageAccuracy >= 70 ? 'orange' : 'red';
-
-                app.innerHTML = `
-                    <div class="no-print fixed top-4 right-4 z-50 space-y-2">
-                        <div class="flex flex-wrap gap-2">
-                            <button onclick="resetForm()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
-                                🔄 새 리포트 작성
-                            </button>
-                            <button onclick="window.print()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors text-lg font-semibold">
-                                📄 PDF로 저장하기
-                            </button>
-                        </div>
-                        
-                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-sm">
-                            <h3 class="font-semibold text-blue-800 mb-2">📱 학부모님께 전송 방법</h3>
-                            <div class="text-sm text-blue-700 space-y-1">
-                                <p>1️⃣ "PDF로 저장하기" 클릭</p>
-                                <p>2️⃣ 저장된 PDF 파일을</p>
-                                <p>3️⃣ 카톡/이메일로 전송</p>
-                                <p class="font-medium mt-2">✨ 간단하고 확실해요!</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="min-h-screen bg-gradient-to-br from-${themeColor}-50 to-${themeColor}-100 p-6 print-bg">
-                        <div class="max-w-7xl mx-auto">
-                            <!-- 헤더 -->
-                            <div class="text-center mb-8">
-                                <h1 class="text-4xl font-bold text-gray-800 mb-2">학기말 성과 리포트</h1>
-                                <p class="text-xl text-gray-600">${appState.studentName} 학생 • 2025년 1학기</p>
-                            </div>
-
-                            <!-- 요약 카드들 - 인쇄용 한 줄 배치 -->
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 stats-grid no-break">
-                                <div class="bg-white rounded-lg shadow-lg p-6 text-center stats-card">
-                                    <div class="text-${themeColor}-500 mb-3">📅</div>
-                                    <h3 class="text-lg font-semibold text-gray-700">출석률</h3>
-                                    <p class="text-3xl font-bold text-${themeColor}-600">${stats.attendanceRate}%</p>
-                                    <p class="text-sm text-gray-500">${stats.attendanceCount + stats.lateCount}/${stats.totalClasses}일</p>
-                                    ${stats.lateCount > 0 ? `<p class="text-xs text-gray-400">지각 ${stats.lateCount}회</p>` : ''}
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-lg p-6 text-center stats-card">
-                                    <div class="text-green-500 mb-3">📈</div>
-                                    <h3 class="text-lg font-semibold text-gray-700">평균 정답률</h3>
-                                    <p class="text-3xl font-bold text-green-600">${stats.averageAccuracy.toFixed(1)}%</p>
-                                    <p class="text-sm text-gray-500">단어 테스트</p>
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-lg p-6 text-center stats-card">
-                                    <div class="${stats.retestCount > 5 ? 'text-red-500' : 'text-blue-500'} mb-3">${stats.retestCount > 5 ? '⚠️' : '📚'}</div>
-                                    <h3 class="text-lg font-semibold text-gray-700">재시험 횟수</h3>
-                                    <p class="text-3xl font-bold ${stats.retestCount > 5 ? 'text-red-600' : 'text-blue-600'}">${stats.retestCount}회</p>
-                                    <p class="text-sm text-gray-500">${stats.retestCount > 5 ? '개선 필요' : '양호'}</p>
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-lg p-6 text-center stats-card">
-                                    <div class="text-purple-500 mb-3">🏆</div>
-                                    <h3 class="text-lg font-semibold text-gray-700">종합 평가</h3>
-                                    <div class="text-2xl font-bold text-purple-600">
-                                        ${isExcellent ? '우수' : stats.averageAccuracy >= 70 ? '보통' : '노력'}
-                                    </div>
-                                    <p class="text-sm text-gray-500">
-                                        ${isExcellent ? '매우 우수함' : stats.averageAccuracy >= 70 ? '꾸준히 향상 중' : '개선 필요'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <!-- 단어 점수 추이 차트 -->
-                            ${stats.chartData.length > 0 ? `
-                            <div class="bg-white rounded-lg shadow-lg p-6 mb-8 no-break">
-                                <h3 class="text-xl font-semibold text-gray-800 mb-4">단어 테스트 정답률 추이</h3>
-                                <div class="chart-container line-chart-container">
-                                    <canvas id="lineChart"></canvas>
-                                </div>
-                            </div>
-                            ` : ''}
-
-                            <!-- 원형 그래프 섹션 - 인쇄용 한 줄 배치 -->
-                            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 pie-charts-grid no-break">
-                                <div class="bg-white rounded-lg shadow-lg p-6 pie-chart-card">
-                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">출석 현황</h3>
-                                    <div class="chart-container">
-                                        <canvas id="attendanceChart"></canvas>
-                                    </div>
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-lg p-6 pie-chart-card">
-                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">수업 태도</h3>
-                                    <div class="chart-container">
-                                        <canvas id="attitudeChart"></canvas>
-                                    </div>
-                                </div>
-
-                                <div class="bg-white rounded-lg shadow-lg p-6 pie-chart-card">
-                                    <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">숙제 이행</h3>
-                                    <div class="chart-container">
-                                        <canvas id="homeworkChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 총평 -->
-                            <div class="bg-white rounded-lg shadow-lg p-6 no-break">
-                                <h3 class="text-xl font-semibold text-gray-800 mb-4">학기 총평</h3>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 summary-grid">
-                                    <div class="summary-column">
-                                        <h4 class="font-semibold text-gray-700 mb-3 text-green-600">강점</h4>
-                                        <div class="space-y-2 text-gray-700 text-sm">
-                                            ${stats.attendanceRate >= 90 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-3"></span>우수한 출석률 (' + stats.attendanceRate + '%)</p>' : ''}
-                                            <p class="flex items-center"><span class="inline-block w-2 h-2 bg-green-500 rounded-full mr-3"></span>꾸준한 수업 참여</p>
-                                        </div>
-                                    </div>
-                                    <div class="summary-column">
-                                        <h4 class="font-semibold text-gray-700 mb-3 text-red-600">개선 필요사항</h4>
-                                        <div class="space-y-2 text-gray-700 text-sm">
-                                            ${stats.retestCount > 3 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-red-500 rounded-full mr-3"></span>재시험 횟수 줄이기 (' + stats.retestCount + '회)</p>' : ''}
-                                            ${stats.lateCount > 0 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-orange-500 rounded-full mr-3"></span>지각 횟수 줄이기 (' + stats.lateCount + '회)</p>' : ''}
-                                            ${stats.averageAccuracy < 80 ? '<p class="flex items-center"><span class="inline-block w-2 h-2 bg-blue-500 rounded-full mr-3"></span>예습·복습을 통한 학습 보완</p>' : ''}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
+            
+                // 종합 평가 계산 (추가)
+                stats.overallGrade = stats.averageAccuracy >= 85 ? '우수'
+                                      : stats.averageAccuracy >= 70 ? '보통' : '노력';
+                stats.overallComment = stats.averageAccuracy >= 85 ? '매우 우수함'
+                                         : stats.averageAccuracy >= 70 ? '꾸준히 향상 중'
+                                         : '개선 필요';
+            
+                app.innerHTML = renderReport(stats);
                 createCharts(stats);
             } else {
                 app.innerHTML = `
